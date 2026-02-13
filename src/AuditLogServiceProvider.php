@@ -1,0 +1,50 @@
+<?php
+
+namespace Campelo\AuditLog;
+
+use Campelo\AuditLog\Middleware\AuditLogMiddleware;
+use Illuminate\Routing\Router;
+use Illuminate\Support\ServiceProvider;
+
+class AuditLogServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->mergeConfigFrom(__DIR__ . '/config/audit-log.php', 'audit-log');
+
+        $this->app->singleton(AuditLogService::class, function ($app) {
+            return new AuditLogService();
+        });
+    }
+
+    public function boot(): void
+    {
+        // Publish config
+        $this->publishes([
+            __DIR__ . '/config/audit-log.php' => config_path('audit-log.php'),
+        ], 'audit-log-config');
+
+        // Publish migrations
+        $this->publishes([
+            __DIR__ . '/database/migrations/' => database_path('migrations'),
+        ], 'audit-log-migrations');
+
+        // Load migrations
+        $this->loadMigrationsFrom(__DIR__ . '/database/migrations');
+
+        // Load routes
+        if (config('audit-log.routes_enabled', true)) {
+            $this->loadRoutesFrom(__DIR__ . '/routes/api.php');
+        }
+
+        // Register middleware
+        $router = $this->app->make(Router::class);
+        $router->aliasMiddleware('audit-log', AuditLogMiddleware::class);
+
+        // Auto-register middleware if enabled
+        if (config('audit-log.auto_register_middleware', true)) {
+            $router->pushMiddlewareToGroup('web', AuditLogMiddleware::class);
+            $router->pushMiddlewareToGroup('api', AuditLogMiddleware::class);
+        }
+    }
+}
