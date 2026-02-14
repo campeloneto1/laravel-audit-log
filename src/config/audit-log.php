@@ -340,4 +340,69 @@ return [
             ? array_map('intval', explode(',', env('AUDIT_LOG_NOTIFY_ON_CODES')))
             : [500, 501, 502, 503, 504],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Performance Logging
+    |--------------------------------------------------------------------------
+    |
+    | Track slow database queries and slow HTTP requests for performance monitoring.
+    |
+    */
+    'performance' => [
+        // Enable or disable performance logging
+        'enabled' => env('AUDIT_LOG_PERFORMANCE_ENABLED', false),
+
+        // Slow query configuration
+        'slow_queries' => [
+            'enabled' => env('AUDIT_LOG_SLOW_QUERIES_ENABLED', true),
+            // Threshold in milliseconds
+            'threshold' => env('AUDIT_LOG_SLOW_QUERY_THRESHOLD', 1000),
+            // Whether to log query bindings
+            'log_bindings' => env('AUDIT_LOG_SLOW_QUERY_BINDINGS', true),
+            // Excluded query patterns (regex)
+            'excluded_patterns' => [],
+        ],
+
+        // Slow request configuration
+        'slow_requests' => [
+            'enabled' => env('AUDIT_LOG_SLOW_REQUESTS_ENABLED', true),
+            // Threshold in milliseconds
+            'threshold' => env('AUDIT_LOG_SLOW_REQUEST_THRESHOLD', 2000),
+            // Log memory usage
+            'log_memory' => true,
+        ],
+
+        // Retention days for performance logs (null = use global retention_days)
+        'retention_days' => env('AUDIT_LOG_PERFORMANCE_RETENTION_DAYS', null),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Rollback
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for the audit log rollback feature.
+    | Allows reverting model changes based on audit log history.
+    |
+    */
+    'rollback' => [
+        // Enable or disable rollback feature
+        'enabled' => env('AUDIT_LOG_ROLLBACK_ENABLED', true),
+
+        // User IDs authorized to perform rollback (empty = nobody)
+        // Set via env as comma-separated: AUDIT_LOG_ROLLBACK_ALLOWED_USERS=1,5,10
+        'allowed_users' => env('AUDIT_LOG_ROLLBACK_ALLOWED_USERS')
+            ? array_map('intval', explode(',', env('AUDIT_LOG_ROLLBACK_ALLOWED_USERS')))
+            : [],
+
+        // Events that can be rolled back
+        'rollbackable_events' => ['created', 'updated', 'deleted'],
+
+        // Maximum chain length for rollback (0 = unlimited)
+        'max_chain_length' => env('AUDIT_LOG_ROLLBACK_MAX_CHAIN', 10),
+
+        // Whether to log the rollback as a new audit event
+        'log_rollback' => true,
+    ],
 ];

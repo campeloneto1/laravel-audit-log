@@ -3,9 +3,12 @@
 namespace Campelo\AuditLog;
 
 use Campelo\AuditLog\Console\Commands\CleanupAuditLogs;
+use Campelo\AuditLog\Listeners\SlowQueryListener;
 use Campelo\AuditLog\Middleware\AuditLogMiddleware;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AuditLogServiceProvider extends ServiceProvider
@@ -67,6 +70,12 @@ class AuditLogServiceProvider extends ServiceProvider
                     ->withoutOverlapping()
                     ->runInBackground();
             });
+        }
+
+        // Register slow query listener if performance logging is enabled
+        if (config('audit-log.performance.enabled', false) &&
+            config('audit-log.performance.slow_queries.enabled', true)) {
+            Event::listen(QueryExecuted::class, SlowQueryListener::class);
         }
     }
 }

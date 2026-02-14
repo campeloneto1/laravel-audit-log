@@ -7,6 +7,8 @@ Automatic audit logging for Laravel applications. Track who did what, when, wher
 - **Automatic Request Logging** - Middleware logs all HTTP requests (POST, PUT, PATCH, DELETE by default)
 - **Model Event Logging** - Trait to automatically log model changes (created, updated, deleted)
 - **Error Logging** - Capture and log exceptions and errors (4xx, 5xx) with stack traces
+- **Performance Logging** - Track slow database queries and slow HTTP requests
+- **Rollback** - Revert model changes based on audit log history
 - **Detailed Information** - Captures user, IP, user agent, URL, method, table, old/new values
 - **Built-in API** - Query audit logs with filters via REST API
 - **Sensitive Data Protection** - Automatically redacts passwords and sensitive fields
@@ -371,6 +373,224 @@ Or in config file:
 ],
 ```
 
+## Performance Logging
+
+Track slow database queries and slow HTTP requests for performance monitoring.
+
+### Configuration
+
+```env
+# Enable performance logging
+AUDIT_LOG_PERFORMANCE_ENABLED=true
+
+# Slow query threshold (milliseconds)
+AUDIT_LOG_SLOW_QUERY_THRESHOLD=1000
+
+# Include query bindings in logs
+AUDIT_LOG_SLOW_QUERY_BINDINGS=true
+
+# Slow request threshold (milliseconds)
+AUDIT_LOG_SLOW_REQUEST_THRESHOLD=2000
+```
+
+### Querying Performance Logs
+
+```php
+use Campelo\AuditLog\Models\AuditLog;
+
+// Get all slow queries
+$slowQueries = AuditLog::slowQueries()->get();
+
+// Get all slow requests
+$slowRequests = AuditLog::slowRequests()->get();
+
+// Get all performance logs
+$performance = AuditLog::performance()->get();
+
+// Filter by duration (in metadata)
+$verySlowQueries = AuditLog::slowQueries()
+    ->whereRaw("JSON_EXTRACT(metadata, '$.execution_time_ms') > 5000")
+    ->get();
+```
+
+### API Endpoints
+
+```bash
+# Get slow query logs
+GET /api/audit-logs?event=slow_query
+
+# Get slow request logs
+GET /api/audit-logs?event=slow_request
+
+# Get all performance logs
+GET /api/audit-logs?events=slow_query,slow_request
+```
+
+### Response Format
+
+**Slow Query:**
+```json
+{
+    "id": 100,
+    "event": "slow_query",
+    "performed_at": "2024-01-15T10:30:00+00:00",
+    "description": "Slow query (1523.45 ms): SELECT * FROM orders WHERE...",
+    "metadata": {
+        "query": "SELECT * FROM orders WHERE status = ? AND created_at > ?",
+        "execution_time_ms": 1523.45,
+        "connection": "mysql",
+        "bindings": ["pending", "2024-01-01"]
+    }
+}
+```
+
+**Slow Request:**
+```json
+{
+    "id": 101,
+    "event": "slow_request",
+    "performed_at": "2024-01-15T10:31:00+00:00",
+    "description": "Slow request (3245.67 ms): GET /api/reports/sales",
+    "metadata": {
+        "duration_ms": 3245.67,
+        "memory_usage_bytes": 52428800,
+        "memory_usage_mb": 50.0,
+        "peak_memory_bytes": 67108864,
+        "peak_memory_mb": 64.0
+    }
+}
+```
+
+## Rollback
+
+Revert model changes based on audit log history. Only authorized users can perform rollback.
+
+### Configuration
+
+```env
+# Enable rollback feature
+AUDIT_LOG_ROLLBACK_ENABLED=true
+
+# User IDs authorized to perform rollback (comma-separated)
+AUDIT_LOG_ROLLBACK_ALLOWED_USERS=1,5,10
+
+# Maximum chain length for rollback (0 = unlimited)
+AUDIT_LOG_ROLLBACK_MAX_CHAIN=10
+```
+
+### Basic Rollback
+
+```php
+use Campelo\AuditLog\Facades\AuditLog;
+use Campelo\AuditLog\Models\AuditLog as AuditLogModel;
+
+// Rollback by audit log ID
+$rollbackLog = AuditLog::rollback($auditLogId);
+
+// Check if rollback is possible
+$result = AuditLog::canRollback($auditLogId);
+// Returns: ['can_rollback' => true/false, 'reason' => '...']
+
+// Rollback via model instance
+$auditLog = AuditLogModel::find($id);
+$rollbackLog = $auditLog->rollback();
+```
+
+### Rollback from Model
+
+```php
+// Rollback to a specific audit log
+$user->rollbackTo($auditLogId);
+
+// Rollback to previous state
+$user->rollbackToPrevious();
+```
+
+### Rollback Chain (Multiple Undos)
+
+```php
+// Rollback the last 3 changes
+$rollbackLogs = AuditLog::rollbackChain($auditLogId, steps: 3);
+```
+
+### API Endpoints
+
+```bash
+# Check if rollback is possible
+GET /api/audit-logs/{id}/can-rollback
+
+# Response
+{
+    "can_rollback": true,
+    "reason": null
+}
+
+# Perform rollback
+POST /api/audit-logs/{id}/rollback
+
+# Response
+{
+    "success": true,
+    "message": "Rollback completed successfully.",
+    "rollback_log": { ... }
+}
+
+# Rollback chain
+POST /api/audit-logs/rollback-chain/{id}
+Body: { "steps": 3 }
+
+# Response
+{
+    "success": true,
+    "message": "Rolled back 3 changes.",
+    "rollback_logs": [...]
+}
+```
+
+### Rollback Events
+
+Each rollback creates a new audit log with event `rollback`:
+
+```json
+{
+    "id": 150,
+    "event": "rollback",
+    "description": "Rolled back updated on User #1 (from audit log #42)",
+    "old_values": { "name": "New Name" },
+    "new_values": { "name": "Original Name" },
+    "metadata": {
+        "rolled_back_audit_log_id": 42,
+        "rolled_back_event": "updated",
+        "rolled_back_at": "2024-01-15T10:00:00+00:00"
+    }
+}
+```
+
+### Querying Rollbacks
+
+```php
+// Get all rollback events
+$rollbacks = AuditLog::rollbacks()->get();
+
+// Get rollbackable events only
+$rollbackable = AuditLog::rollbackable()->get();
+
+// Check if an audit log was rolled back
+$auditLog = AuditLogModel::find($id);
+if ($auditLog->isRolledBack()) {
+    $rollbackLog = $auditLog->getRollbackLog();
+}
+```
+
+### Limitations
+
+- **created**: Rollback deletes the model
+- **updated**: Rollback restores old values
+- **deleted**: Rollback restores soft-deleted models or recreates with old_values
+- Cannot rollback events without `old_values` (e.g., if not stored)
+- Cannot rollback non-model events (e.g., `error`, `slow_query`)
+- Each audit log can only be rolled back once
+
 ## Query Using Model
 
 ```php
@@ -627,6 +847,33 @@ return [
         'notify_on_codes' => env('AUDIT_LOG_NOTIFY_ON_CODES')
             ? array_map('intval', explode(',', env('AUDIT_LOG_NOTIFY_ON_CODES')))
             : [500, 501, 502, 503, 504],
+    ],
+
+    // Performance logging
+    'performance' => [
+        'enabled' => env('AUDIT_LOG_PERFORMANCE_ENABLED', false),
+        'slow_queries' => [
+            'enabled' => env('AUDIT_LOG_SLOW_QUERIES_ENABLED', true),
+            'threshold' => env('AUDIT_LOG_SLOW_QUERY_THRESHOLD', 1000),
+            'log_bindings' => env('AUDIT_LOG_SLOW_QUERY_BINDINGS', true),
+        ],
+        'slow_requests' => [
+            'enabled' => env('AUDIT_LOG_SLOW_REQUESTS_ENABLED', true),
+            'threshold' => env('AUDIT_LOG_SLOW_REQUEST_THRESHOLD', 2000),
+            'log_memory' => true,
+        ],
+    ],
+
+    // Rollback
+    'rollback' => [
+        'enabled' => env('AUDIT_LOG_ROLLBACK_ENABLED', true),
+        // Configurable via AUDIT_LOG_ROLLBACK_ALLOWED_USERS=1,5,10
+        'allowed_users' => env('AUDIT_LOG_ROLLBACK_ALLOWED_USERS')
+            ? array_map('intval', explode(',', env('AUDIT_LOG_ROLLBACK_ALLOWED_USERS')))
+            : [],
+        'rollbackable_events' => ['created', 'updated', 'deleted'],
+        'max_chain_length' => env('AUDIT_LOG_ROLLBACK_MAX_CHAIN', 10),
+        'log_rollback' => true,
     ],
 ];
 ```

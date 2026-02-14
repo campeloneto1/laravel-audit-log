@@ -27,6 +27,15 @@ Route::prefix(config('audit-log.route_prefix', 'api/audit-logs'))
         // Get logs for specific user
         Route::get('/user/{userId}', [AuditLogController::class, 'forUser'])->name('for-user');
 
+        // Rollback chain
+        Route::post('/rollback-chain/{id}', [AuditLogController::class, 'rollbackChain'])->name('rollback-chain');
+
+        // Check if can rollback
+        Route::get('/{id}/can-rollback', [AuditLogController::class, 'canRollback'])->name('can-rollback');
+
+        // Perform rollback
+        Route::post('/{id}/rollback', [AuditLogController::class, 'rollback'])->name('rollback');
+
         // Show single entry
         Route::get('/{id}', [AuditLogController::class, 'show'])->name('show');
     });

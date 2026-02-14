@@ -2,6 +2,7 @@
 
 namespace Campelo\AuditLog\Models;
 
+use Campelo\AuditLog\AuditLogService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -225,5 +226,94 @@ class AuditLog extends Model
         }
 
         return $summary;
+    }
+
+    // =========================================================================
+    // PERFORMANCE SCOPES
+    // =========================================================================
+
+    /**
+     * Scope to get only slow query logs.
+     */
+    public function scopeSlowQueries(Builder $query): Builder
+    {
+        return $query->where('event', 'slow_query');
+    }
+
+    /**
+     * Scope to get only slow request logs.
+     */
+    public function scopeSlowRequests(Builder $query): Builder
+    {
+        return $query->where('event', 'slow_request');
+    }
+
+    /**
+     * Scope to get all performance logs (slow queries + slow requests).
+     */
+    public function scopePerformance(Builder $query): Builder
+    {
+        return $query->whereIn('event', ['slow_query', 'slow_request']);
+    }
+
+    // =========================================================================
+    // ROLLBACK SCOPES & METHODS
+    // =========================================================================
+
+    /**
+     * Scope to filter rollback events.
+     */
+    public function scopeRollbacks(Builder $query): Builder
+    {
+        return $query->where('event', 'rollback');
+    }
+
+    /**
+     * Scope to filter only rollbackable events.
+     */
+    public function scopeRollbackable(Builder $query): Builder
+    {
+        $events = config('audit-log.rollback.rollbackable_events', ['created', 'updated', 'deleted']);
+
+        return $query->whereIn('event', $events);
+    }
+
+    /**
+     * Rollback this audit log entry.
+     *
+     * @return AuditLog|null The rollback audit log entry
+     * @throws \Campelo\AuditLog\Exceptions\RollbackException
+     */
+    public function rollback(): ?AuditLog
+    {
+        return app(AuditLogService::class)->rollback($this->id);
+    }
+
+    /**
+     * Check if this audit log can be rolled back.
+     */
+    public function canRollback(): array
+    {
+        return app(AuditLogService::class)->canRollback($this->id);
+    }
+
+    /**
+     * Check if this audit log entry has been rolled back.
+     */
+    public function isRolledBack(): bool
+    {
+        return self::where('event', 'rollback')
+            ->whereRaw("JSON_EXTRACT(metadata, '$.rolled_back_audit_log_id') = ?", [$this->id])
+            ->exists();
+    }
+
+    /**
+     * Get the rollback audit log if this entry was rolled back.
+     */
+    public function getRollbackLog(): ?AuditLog
+    {
+        return self::where('event', 'rollback')
+            ->whereRaw("JSON_EXTRACT(metadata, '$.rolled_back_audit_log_id') = ?", [$this->id])
+            ->first();
     }
 }

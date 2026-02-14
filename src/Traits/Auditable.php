@@ -117,4 +117,46 @@ trait Auditable
     {
         return null;
     }
+
+    // =========================================================================
+    // ROLLBACK METHODS
+    // =========================================================================
+
+    /**
+     * Rollback this model to a specific audit log state.
+     *
+     * @param int $auditLogId The audit log ID to rollback to
+     * @return AuditLog|null The rollback audit log entry
+     * @throws \Campelo\AuditLog\Exceptions\RollbackException
+     */
+    public function rollbackTo(int $auditLogId): ?AuditLog
+    {
+        $auditLog = AuditLog::where('id', $auditLogId)
+            ->where('auditable_type', get_class($this))
+            ->where('auditable_id', $this->getKey())
+            ->firstOrFail();
+
+        return app(AuditLogService::class)->rollback($auditLog->id);
+    }
+
+    /**
+     * Rollback this model to its previous state.
+     *
+     * @return AuditLog|null The rollback audit log entry
+     * @throws \Campelo\AuditLog\Exceptions\RollbackException
+     */
+    public function rollbackToPrevious(): ?AuditLog
+    {
+        $rollbackableEvents = config('audit-log.rollback.rollbackable_events', ['created', 'updated', 'deleted']);
+
+        $lastChange = $this->auditLogs()
+            ->whereIn('event', $rollbackableEvents)
+            ->first();
+
+        if (!$lastChange) {
+            return null;
+        }
+
+        return app(AuditLogService::class)->rollback($lastChange->id);
+    }
 }

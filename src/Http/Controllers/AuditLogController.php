@@ -2,6 +2,8 @@
 
 namespace Campelo\AuditLog\Http\Controllers;
 
+use Campelo\AuditLog\AuditLogService;
+use Campelo\AuditLog\Exceptions\RollbackException;
 use Campelo\AuditLog\Http\Resources\AuditLogResource;
 use Campelo\AuditLog\Models\AuditLog;
 use Illuminate\Http\JsonResponse;
@@ -267,5 +269,73 @@ class AuditLogController extends Controller
             'deleted' => $deleted,
             'message' => "Deleted {$deleted} audit logs older than {$days} days",
         ]);
+    }
+
+    // =========================================================================
+    // ROLLBACK ENDPOINTS
+    // =========================================================================
+
+    /**
+     * Rollback a specific audit log entry.
+     *
+     * POST /api/audit-logs/{id}/rollback
+     */
+    public function rollback(int $id): JsonResponse
+    {
+        try {
+            $auditLogService = app(AuditLogService::class);
+            $rollbackLog = $auditLogService->rollback($id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Rollback completed successfully.',
+                'rollback_log' => $rollbackLog ? new AuditLogResource($rollbackLog) : null,
+            ]);
+        } catch (RollbackException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Check if an audit log can be rolled back.
+     *
+     * GET /api/audit-logs/{id}/can-rollback
+     */
+    public function canRollback(int $id): JsonResponse
+    {
+        $auditLogService = app(AuditLogService::class);
+        $result = $auditLogService->canRollback($id);
+
+        return response()->json($result);
+    }
+
+    /**
+     * Rollback a chain of changes.
+     *
+     * POST /api/audit-logs/rollback-chain/{id}
+     * Body: { "steps": 3 }
+     */
+    public function rollbackChain(Request $request, int $id): JsonResponse
+    {
+        $steps = $request->input('steps', 1);
+
+        try {
+            $auditLogService = app(AuditLogService::class);
+            $rollbackLogs = $auditLogService->rollbackChain($id, $steps);
+
+            return response()->json([
+                'success' => true,
+                'message' => sprintf('Rolled back %d changes.', count($rollbackLogs)),
+                'rollback_logs' => AuditLogResource::collection(collect($rollbackLogs)),
+            ]);
+        } catch (RollbackException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 400);
+        }
     }
 }
