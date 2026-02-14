@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Throwable;
 
 class AuditLogService
 {
@@ -296,5 +298,139 @@ class AuditLogService
         }
 
         return "{$method} {$path}";
+    }
+
+    /**
+     * Log an error/exception.
+     */
+    public function logError(
+        Throwable $exception,
+        ?Request $request = null,
+        ?array $context = null
+    ): ?AuditLog {
+        if (!$this->shouldLogError($exception)) {
+            return null;
+        }
+
+        $request = $request ?? request();
+        $statusCode = $this->getExceptionStatusCode($exception);
+
+        $metadata = [
+            'exception_class' => get_class($exception),
+            'exception_code' => $exception->getCode(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'context' => $context ? $this->filterSensitiveData($context) : null,
+        ];
+
+        if (config('audit-log.errors.log_stack_trace', true)) {
+            $metadata['stack_trace'] = $this->formatStackTrace($exception);
+        }
+
+        $data = [
+            'user_id' => $this->getUserId(),
+            'user_type' => $this->getUserType(),
+            'user_name' => $this->getUserName(),
+            'user_email' => $this->getUserEmail(),
+            'performed_at' => now(),
+            'ip_address' => $request?->ip(),
+            'user_agent' => $request?->userAgent(),
+            'url' => $request?->fullUrl(),
+            'method' => $request?->method(),
+            'route_name' => $request?->route()?->getName(),
+            'event' => 'error',
+            'response_code' => $statusCode,
+            'request_data' => $request ? $this->filterSensitiveData($request->all()) : null,
+            'metadata' => $metadata,
+            'description' => $this->buildErrorDescription($exception, $statusCode),
+        ];
+
+        return $this->write($data);
+    }
+
+    /**
+     * Check if the exception should be logged.
+     */
+    protected function shouldLogError(Throwable $exception): bool
+    {
+        if (!config('audit-log.errors.enabled', true)) {
+            return false;
+        }
+
+        // Check if exception class is excluded
+        $excludedExceptions = config('audit-log.errors.excluded_exceptions', []);
+        foreach ($excludedExceptions as $excludedException) {
+            if ($exception instanceof $excludedException) {
+                return false;
+            }
+        }
+
+        // Check error family (4xx or 5xx)
+        $statusCode = $this->getExceptionStatusCode($exception);
+
+        $is4xx = $statusCode >= 400 && $statusCode < 500;
+        $is5xx = $statusCode >= 500 && $statusCode < 600;
+
+        if ($is4xx && !config('audit-log.errors.log_4xx', false)) {
+            return false;
+        }
+
+        if ($is5xx && !config('audit-log.errors.log_5xx', true)) {
+            return false;
+        }
+
+        // If it's not 4xx or 5xx, log it as a generic error (5xx behavior)
+        if (!$is4xx && !$is5xx) {
+            return config('audit-log.errors.log_5xx', true);
+        }
+
+        return true;
+    }
+
+    /**
+     * Get the HTTP status code from an exception.
+     */
+    protected function getExceptionStatusCode(Throwable $exception): int
+    {
+        if ($exception instanceof HttpExceptionInterface) {
+            return $exception->getStatusCode();
+        }
+
+        if (method_exists($exception, 'getStatusCode')) {
+            return $exception->getStatusCode();
+        }
+
+        // Default to 500 for generic exceptions
+        return 500;
+    }
+
+    /**
+     * Format the stack trace for logging.
+     */
+    protected function formatStackTrace(Throwable $exception): string
+    {
+        $maxLength = config('audit-log.errors.max_stack_trace_length', 5000);
+        $trace = $exception->getTraceAsString();
+
+        if (strlen($trace) > $maxLength) {
+            return substr($trace, 0, $maxLength) . "\n...[truncated]";
+        }
+
+        return $trace;
+    }
+
+    /**
+     * Build a description for the error.
+     */
+    protected function buildErrorDescription(Throwable $exception, int $statusCode): string
+    {
+        $class = class_basename($exception);
+        $message = $exception->getMessage();
+
+        if (strlen($message) > 200) {
+            $message = substr($message, 0, 200) . '...';
+        }
+
+        return "[{$statusCode}] {$class}: {$message}";
     }
 }

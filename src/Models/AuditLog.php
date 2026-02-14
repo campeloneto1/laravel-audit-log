@@ -141,6 +141,46 @@ class AuditLog extends Model
     }
 
     /**
+     * Scope to get only error logs.
+     */
+    public function scopeErrors(Builder $query): Builder
+    {
+        return $query->where('event', 'error');
+    }
+
+    /**
+     * Scope to get only server error logs (5xx).
+     */
+    public function scopeServerErrors(Builder $query): Builder
+    {
+        return $query->where('event', 'error')
+            ->where('response_code', '>=', 500)
+            ->where('response_code', '<', 600);
+    }
+
+    /**
+     * Scope to get only client error logs (4xx).
+     */
+    public function scopeClientErrors(Builder $query): Builder
+    {
+        return $query->where('event', 'error')
+            ->where('response_code', '>=', 400)
+            ->where('response_code', '<', 500);
+    }
+
+    /**
+     * Scope to filter by response code.
+     */
+    public function scopeResponseCode(Builder $query, int|array $code): Builder
+    {
+        if (is_array($code)) {
+            return $query->whereIn('response_code', $code);
+        }
+
+        return $query->where('response_code', $code);
+    }
+
+    /**
      * Get the changes as a human-readable diff.
      */
     public function getChangesAttribute(): array

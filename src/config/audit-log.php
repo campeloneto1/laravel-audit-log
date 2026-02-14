@@ -193,6 +193,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Automatic Cleanup
+    |--------------------------------------------------------------------------
+    |
+    | Automatically schedule cleanup of old audit logs.
+    | The cleanup runs daily at the specified time.
+    |
+    */
+    'cleanup' => [
+        'enabled' => env('AUDIT_LOG_CLEANUP_ENABLED', false),
+        'schedule' => env('AUDIT_LOG_CLEANUP_SCHEDULE', '02:00'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Log Console Commands
     |--------------------------------------------------------------------------
     |
@@ -249,4 +263,40 @@ return [
     |
     */
     'route_middleware' => ['api', 'auth'],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Error Logging
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for logging exceptions and errors.
+    | Integrate with your App\Exceptions\Handler using the AuditLogExceptionHandler trait.
+    |
+    */
+    'errors' => [
+        // Enable or disable error logging
+        'enabled' => env('AUDIT_LOG_ERRORS_ENABLED', true),
+
+        // Log client errors (400-499)
+        'log_4xx' => env('AUDIT_LOG_ERRORS_4XX', false),
+
+        // Log server errors (500-599)
+        'log_5xx' => env('AUDIT_LOG_ERRORS_5XX', true),
+
+        // Include stack trace in the log
+        'log_stack_trace' => true,
+
+        // Maximum length for stack trace (in characters)
+        'max_stack_trace_length' => 5000,
+
+        // Exceptions that should not be logged
+        'excluded_exceptions' => [
+            \Illuminate\Auth\AuthenticationException::class,
+            \Illuminate\Validation\ValidationException::class,
+            \Symfony\Component\HttpKernel\Exception\NotFoundHttpException::class,
+        ],
+
+        // Retention days for error logs (null = use global retention_days)
+        'retention_days' => env('AUDIT_LOG_ERRORS_RETENTION_DAYS', null),
+    ],
 ];

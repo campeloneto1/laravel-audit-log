@@ -2,7 +2,9 @@
 
 namespace Campelo\AuditLog;
 
+use Campelo\AuditLog\Console\Commands\CleanupAuditLogs;
 use Campelo\AuditLog\Middleware\AuditLogMiddleware;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 
@@ -45,6 +47,26 @@ class AuditLogServiceProvider extends ServiceProvider
         if (config('audit-log.auto_register_middleware', true)) {
             $router->pushMiddlewareToGroup('web', AuditLogMiddleware::class);
             $router->pushMiddlewareToGroup('api', AuditLogMiddleware::class);
+        }
+
+        // Register commands
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                CleanupAuditLogs::class,
+            ]);
+        }
+
+        // Schedule automatic cleanup if enabled
+        if (config('audit-log.cleanup.enabled', false)) {
+            $this->app->booted(function () {
+                $schedule = $this->app->make(Schedule::class);
+                $time = config('audit-log.cleanup.schedule', '02:00');
+
+                $schedule->command('audit-log:cleanup')
+                    ->dailyAt($time)
+                    ->withoutOverlapping()
+                    ->runInBackground();
+            });
         }
     }
 }
