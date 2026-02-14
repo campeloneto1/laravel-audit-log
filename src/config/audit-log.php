@@ -299,4 +299,45 @@ return [
         // Retention days for error logs (null = use global retention_days)
         'retention_days' => env('AUDIT_LOG_ERRORS_RETENTION_DAYS', null),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Notifications
+    |--------------------------------------------------------------------------
+    |
+    | Send notifications when errors occur.
+    | Requires Laravel's mail configuration for email notifications.
+    | Requires laravel/slack-notification-channel for Slack notifications.
+    |
+    */
+    'notifications' => [
+        // Enable or disable notifications
+        'enabled' => env('AUDIT_LOG_NOTIFICATIONS_ENABLED', false),
+
+        // Channels to use: 'mail', 'slack', or both ['mail', 'slack']
+        'channels' => explode(',', env('AUDIT_LOG_NOTIFY_CHANNELS', 'mail')),
+
+        // Email configuration (uses Laravel's mail config)
+        'mail' => [
+            'to' => env('AUDIT_LOG_NOTIFY_EMAIL', null),
+        ],
+
+        // Slack configuration
+        'slack' => [
+            'webhook_url' => env('AUDIT_LOG_SLACK_WEBHOOK', null),
+        ],
+
+        // Throttling to prevent notification spam
+        'throttle' => [
+            'enabled' => true,
+            'max_notifications' => 5,   // Max notifications per error type
+            'decay_minutes' => 60,      // Time window in minutes
+        ],
+
+        // Which response codes trigger notifications
+        // Set via env as comma-separated: AUDIT_LOG_NOTIFY_ON_CODES=500,502,503
+        'notify_on_codes' => env('AUDIT_LOG_NOTIFY_ON_CODES')
+            ? array_map('intval', explode(',', env('AUDIT_LOG_NOTIFY_ON_CODES')))
+            : [500, 501, 502, 503, 504],
+    ],
 ];

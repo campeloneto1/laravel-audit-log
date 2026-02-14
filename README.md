@@ -12,6 +12,7 @@ Automatic audit logging for Laravel applications. Track who did what, when, wher
 - **Sensitive Data Protection** - Automatically redacts passwords and sensitive fields
 - **Queue Support** - Offload logging to queues for better performance
 - **Customizable** - Configure which methods, routes, events, and error types to log
+- **Notifications** - Send email/Slack alerts when critical errors occur
 
 ## Installation
 
@@ -299,6 +300,77 @@ protected function schedule(Schedule $schedule): void
 }
 ```
 
+## Notifications
+
+Get notified via Email and/or Slack when critical errors (5xx) occur.
+
+### Configuration
+
+```env
+# Enable notifications
+AUDIT_LOG_NOTIFICATIONS_ENABLED=true
+
+# Choose channels: mail, slack, or both
+AUDIT_LOG_NOTIFY_CHANNELS=mail          # Only email
+AUDIT_LOG_NOTIFY_CHANNELS=slack         # Only Slack
+AUDIT_LOG_NOTIFY_CHANNELS=mail,slack    # Both
+
+# Email recipient (uses Laravel's mail config)
+AUDIT_LOG_NOTIFY_EMAIL=admin@example.com
+
+# Slack webhook URL
+AUDIT_LOG_SLACK_WEBHOOK=https://hooks.slack.com/services/xxx/yyy/zzz
+```
+
+### Requirements
+
+- **Email**: Uses Laravel's built-in mail configuration (`config/mail.php`)
+- **Slack**: Requires the Slack notification channel package:
+
+```bash
+composer require laravel/slack-notification-channel
+```
+
+### Throttling
+
+To prevent notification spam, the package throttles repeated errors:
+
+- Same error (same exception class + file + line) will only notify 5 times per hour
+- Configurable in `config/audit-log.php`:
+
+```php
+'notifications' => [
+    'throttle' => [
+        'enabled' => true,
+        'max_notifications' => 5,   // Max notifications per error type
+        'decay_minutes' => 60,      // Time window
+    ],
+],
+```
+
+### Which errors trigger notifications
+
+By default, only server errors (5xx) trigger notifications. You can customize via `.env`:
+
+```env
+# Default: 500,501,502,503,504
+AUDIT_LOG_NOTIFY_ON_CODES=500,502,503
+
+# Include all server errors
+AUDIT_LOG_NOTIFY_ON_CODES=500,501,502,503,504,505,506,507,508,510,511
+
+# Include some client errors too
+AUDIT_LOG_NOTIFY_ON_CODES=401,403,500,502,503
+```
+
+Or in config file:
+
+```php
+'notifications' => [
+    'notify_on_codes' => [500, 501, 502, 503, 504],
+],
+```
+
 ## Query Using Model
 
 ```php
@@ -534,6 +606,27 @@ return [
             \Symfony\Component\HttpKernel\Exception\NotFoundHttpException::class,
         ],
         'retention_days' => env('AUDIT_LOG_ERRORS_RETENTION_DAYS', null),
+    ],
+
+    // Notifications
+    'notifications' => [
+        'enabled' => env('AUDIT_LOG_NOTIFICATIONS_ENABLED', false),
+        'channels' => explode(',', env('AUDIT_LOG_NOTIFY_CHANNELS', 'mail')),
+        'mail' => [
+            'to' => env('AUDIT_LOG_NOTIFY_EMAIL', null),
+        ],
+        'slack' => [
+            'webhook_url' => env('AUDIT_LOG_SLACK_WEBHOOK', null),
+        ],
+        'throttle' => [
+            'enabled' => true,
+            'max_notifications' => 5,
+            'decay_minutes' => 60,
+        ],
+        // Configurable via AUDIT_LOG_NOTIFY_ON_CODES=500,502,503
+        'notify_on_codes' => env('AUDIT_LOG_NOTIFY_ON_CODES')
+            ? array_map('intval', explode(',', env('AUDIT_LOG_NOTIFY_ON_CODES')))
+            : [500, 501, 502, 503, 504],
     ],
 ];
 ```

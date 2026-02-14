@@ -4,9 +4,12 @@ namespace Campelo\AuditLog;
 
 use Campelo\AuditLog\Jobs\WriteAuditLog;
 use Campelo\AuditLog\Models\AuditLog;
+use Campelo\AuditLog\Notifications\AuditLogErrorNotification;
+use Campelo\AuditLog\Notifications\AuditLogNotifiable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
@@ -345,7 +348,74 @@ class AuditLogService
             'description' => $this->buildErrorDescription($exception, $statusCode),
         ];
 
-        return $this->write($data);
+        $result = $this->write($data);
+
+        // Send notification if enabled
+        $this->sendErrorNotification($data);
+
+        return $result;
+    }
+
+    /**
+     * Send error notification if enabled.
+     */
+    protected function sendErrorNotification(array $data): void
+    {
+        if (!config('audit-log.notifications.enabled', false)) {
+            return;
+        }
+
+        // Check if response code should trigger notification
+        $notifyOnCodes = config('audit-log.notifications.notify_on_codes', [500, 501, 502, 503, 504]);
+        if (!empty($notifyOnCodes) && !in_array($data['response_code'], $notifyOnCodes)) {
+            return;
+        }
+
+        // Check throttling
+        if ($this->isNotificationThrottled($data)) {
+            return;
+        }
+
+        try {
+            $notifiable = new AuditLogNotifiable();
+            $notifiable->notify(new AuditLogErrorNotification($data));
+        } catch (Throwable $e) {
+            // Silently fail to avoid breaking the app
+            if (config('app.debug')) {
+                logger()->warning('AuditLog: Failed to send notification', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Check if notification is throttled.
+     */
+    protected function isNotificationThrottled(array $data): bool
+    {
+        if (!config('audit-log.notifications.throttle.enabled', true)) {
+            return false;
+        }
+
+        $exceptionClass = $data['metadata']['exception_class'] ?? 'unknown';
+        $file = $data['metadata']['file'] ?? '';
+        $line = $data['metadata']['line'] ?? '';
+
+        $cacheKey = 'audit_log_notify_' . md5($exceptionClass . $file . $line);
+
+        $maxNotifications = config('audit-log.notifications.throttle.max_notifications', 5);
+        $decayMinutes = config('audit-log.notifications.throttle.decay_minutes', 60);
+
+        $count = Cache::get($cacheKey, 0);
+
+        if ($count >= $maxNotifications) {
+            return true;
+        }
+
+        Cache::put($cacheKey, $count + 1, now()->addMinutes($decayMinutes));
+
+        return false;
     }
 
     /**

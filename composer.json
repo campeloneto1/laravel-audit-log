@@ -1,44 +1,54 @@
 {
-    "name": "campelo/laravel-audit-log",
-    "description": "Automatic audit logging for Laravel applications - track who, when, where, what changed",
-    "keywords": ["laravel", "audit", "log", "activity", "tracking", "history"],
-    "license": "MIT",
-    "authors": [
-        {
-            "name": "Jose Campelo",
-            "email": "jose.campelo@soffia.co"
-        }
-    ],
-    "require": {
-        "php": "^8.1",
-        "illuminate/support": "^10.0|^11.0",
-        "illuminate/database": "^10.0|^11.0",
-        "illuminate/http": "^10.0|^11.0"
-    },
-    "require-dev": {
-        "orchestra/testbench": "^8.0|^9.0",
-        "phpunit/phpunit": "^10.0"
-    },
-    "autoload": {
-        "psr-4": {
-            "Campelo\\AuditLog\\": "src/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "Campelo\\AuditLog\\Tests\\": "tests/"
-        }
-    },
-    "extra": {
-        "laravel": {
-            "providers": [
-                "Campelo\\AuditLog\\AuditLogServiceProvider"
-            ],
-            "aliases": {
-                "AuditLog": "Campelo\\AuditLog\\Facades\\AuditLog"
-            }
-        }
-    },
-    "minimum-stability": "stable",
-    "prefer-stable": true
+  "name": "campelo/laravel-audit-log",
+  "description": "Automatic audit logging for Laravel applications - track who, when, where, what changed",
+  "keywords": [
+    "laravel",
+    "audit",
+    "log",
+    "activity",
+    "tracking",
+    "history"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Jose Campelo",
+      "email": "campeloneto1@gmail.com"
+    }
+  ],
+  "require": {
+    "php": "^8.1",
+    "illuminate/support": "^10.0|^11.0",
+    "illuminate/database": "^10.0|^11.0",
+    "illuminate/http": "^10.0|^11.0"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^8.0|^9.0",
+    "phpunit/phpunit": "^10.0"
+  },
+  "suggest": {
+    "laravel/slack-notification-channel": "Required for Slack notifications (^2.0|^3.0)"
+  },
+  "autoload": {
+    "psr-4": {
+      "Campelo\\AuditLog\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Campelo\\AuditLog\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Campelo\\AuditLog\\AuditLogServiceProvider"
+      ],
+      "aliases": {
+        "AuditLog": "Campelo\\AuditLog\\Facades\\AuditLog"
+      }
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
 }
